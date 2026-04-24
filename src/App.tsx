@@ -1,23 +1,19 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import { 
-  getFirestore, doc, setDoc, onSnapshot, collection, addDoc, serverTimestamp, query 
+  getFirestore, doc, setDoc, onSnapshot, collection, addDoc, serverTimestamp 
 } from 'firebase/firestore';
 import { 
-  getAuth, 
-  signInAnonymously, 
-  signInWithCustomToken, 
-  onAuthStateChanged 
+  getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged 
 } from 'firebase/auth';
 import { 
   Plus, Save, Trash2, Layout, Table as TableIcon, BarChart3, 
   FileUp, ChevronUp, ChevronDown, Sparkles, Clock, Settings2, 
-  X, Copy, HardDrive, Search, FileText, CheckCircle2, ChevronRight,
-  Menu, PanelLeftClose, PanelLeftOpen
+  X, Copy, HardDrive, FileText, ChevronRight, PanelLeftClose, PanelLeftOpen, Maximize, Edit3
 } from 'lucide-react';
 
 // ==========================================
-// CẤU HÌNH FIREBASE CỦA BẠN TẠI ĐÂY
+// CẤU HÌNH FIREBASE - VUI LÒNG ĐIỀN TẠI ĐÂY
 // ==========================================
 const myManualFirebaseConfig = {
   apiKey: "AIzaSyD0s59u68kj-PmaAQGU-pC3nomLIYTOdDM",
@@ -35,7 +31,7 @@ const firebaseConfig = typeof __firebase_config !== 'undefined'
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'pp-report-advanced';
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'pp-report-pro-169';
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -44,20 +40,23 @@ export default function App() {
     { 
       id: '1', 
       type: 'table', 
-      title: 'BÁO CÁO HIỆU QUẢ DIGITAL CHI TIẾT', 
-      content: { data: [['STT', 'Kênh', 'Ngân sách', 'KPIs', 'ROI', 'Ghi chú'], ['1', 'Facebook', '50M', '1000', '2.5', 'Ổn định'], ['2', 'Google', '30M', '500', '3.0', 'Tăng trưởng']], config: {} } 
+      title: 'BÁO CÁO TỔNG QUAN HIỆU SUẤT DIGITAL',
+      subtitle: 'DIGITAL PERFORMANCE STRATEGY 2024',
+      pageLabel: 'PAGE 01',
+      footerLeft: 'Confidential Report',
+      footerRight: 'Digital v3.0',
+      content: { data: [['STT', 'KÊNH QUẢNG CÁO', 'NGÂN SÁCH', 'KPI TARGET', 'ROI THỰC TẾ', 'NHẬN ĐỊNH'], ['1', 'Facebook Ads', '120,000,000', '4,500 Lead', '3.2x', 'Tối ưu tốt'], ['2', 'Google Search', '85,000,000', '1,200 Conv', '4.5x', 'Hiệu quả cao']], config: {} } 
     }
   ]);
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
-  const [reportName, setReportName] = useState("Báo cáo Chiến lược Digital 2024");
+  const [reportName, setReportName] = useState("BÁO CÁO CHIẾN LƯỢC DIGITAL QUÝ 2");
   const [showDrive, setShowDrive] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState([]);
 
-  // Auth initialization
+  // Auth & Sync
   useEffect(() => {
     const initAuth = async () => {
       try {
@@ -66,94 +65,60 @@ export default function App() {
         } else {
           await signInAnonymously(auth);
         }
-      } catch (err) {
-        console.error("Auth failed:", err);
-      }
+      } catch (err) { console.error(err); }
     };
     initAuth();
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-    });
-    return () => unsubscribe();
+    return onAuthStateChanged(auth, setUser);
   }, []);
 
-  // Firestore sync
   useEffect(() => {
     if (!user) return;
-
     const reportRef = doc(db, 'artifacts', appId, 'public', 'data', 'reports', 'currentReport');
-    const unsubReport = onSnapshot(reportRef, (snap) => {
+    return onSnapshot(reportRef, (snap) => {
       if (snap.exists()) {
         const data = snap.data();
-        if (data.slides) {
-          try {
-            const parsed = JSON.parse(data.slides);
-            setSlides(parsed);
-          } catch (e) {
-            console.error("Parse error:", e);
-          }
-        }
+        if (data.slides) setSlides(JSON.parse(data.slides));
         if (data.name) setReportName(data.name);
       }
-    }, (error) => {
-      console.error("Firestore error:", error);
     });
-
-    const historyRef = collection(db, 'artifacts', appId, 'public', 'data', 'versions');
-    const unsubHistory = onSnapshot(historyRef, (snap) => {
-      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setHistory(docs);
-    });
-
-    return () => {
-      unsubReport();
-      unsubHistory();
-    };
   }, [user]);
 
   const saveReport = async (isNewVersion = false) => {
     if (!user) return;
     setIsSaving(true);
     try {
-      const data = { 
-        name: reportName, 
-        slides: JSON.stringify(slides), 
-        updatedAt: new Date().toISOString(),
-        author: user.uid
-      };
-      
+      const data = { name: reportName, slides: JSON.stringify(slides), updatedAt: new Date().toISOString() };
       await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'reports', 'currentReport'), data);
-      
       if (isNewVersion) {
-        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'versions'), { 
-          ...data, 
-          versionName: `Bản lưu ${new Date().toLocaleString()}`,
-          serverTime: serverTimestamp()
-        });
+        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'versions'), { ...data, versionName: `Version ${new Date().toLocaleString()}` });
       }
-    } catch (e) { 
-      console.error("Save error:", e); 
-    } finally {
-      setTimeout(() => setIsSaving(false), 800);
-    }
+    } catch (e) { console.error(e); }
+    setTimeout(() => setIsSaving(false), 800);
   };
 
-  const handleTableUpdate = (sIdx, rIdx, cIdx, val) => {
+  const handleSlideUpdate = (field, value) => {
     const newSlides = [...slides];
-    newSlides[sIdx].content.data[rIdx][cIdx] = val;
+    newSlides[currentSlideIndex][field] = value;
+    setSlides(newSlides);
+  };
 
-    if (newSlides[sIdx].content.data.length > 11) {
-      const header = newSlides[sIdx].content.data[0];
-      const excessData = newSlides[sIdx].content.data.slice(11);
-      newSlides[sIdx].content.data = newSlides[sIdx].content.data.slice(0, 11);
+  const handleTableUpdate = (rIdx, cIdx, val) => {
+    const newSlides = [...slides];
+    newSlides[currentSlideIndex].content.data[rIdx][cIdx] = val;
+    
+    // Auto-pagination logic (max 10 rows per slide)
+    if (newSlides[currentSlideIndex].content.data.length > 11) {
+      const header = newSlides[currentSlideIndex].content.data[0];
+      const excess = newSlides[currentSlideIndex].content.data.slice(11);
+      newSlides[currentSlideIndex].content.data = newSlides[currentSlideIndex].content.data.slice(0, 11);
       const nextSlide = {
+        ...newSlides[currentSlideIndex],
         id: Date.now().toString(),
-        type: 'table',
-        title: newSlides[sIdx].title,
-        content: { data: [header, ...excessData], config: {} }
+        pageLabel: `PAGE ${parseInt(newSlides[currentSlideIndex].pageLabel.split(' ')[1]) + 1}`,
+        content: { data: [header, ...excess], config: {} }
       };
-      newSlides.splice(sIdx + 1, 0, nextSlide);
-      setCurrentSlideIndex(sIdx + 1);
+      newSlides.splice(currentSlideIndex + 1, 0, nextSlide);
+      setCurrentSlideIndex(currentSlideIndex + 1);
     }
     setSlides(newSlides);
   };
@@ -162,8 +127,12 @@ export default function App() {
     const newSlide = {
       id: Date.now().toString(),
       type,
-      title: type === 'table' ? 'TIÊU ĐỀ BÁO CÁO BẢNG' : 'PHÂN TÍCH CHIẾN LƯỢC TỪ AI',
-      content: type === 'table' ? { data: [['STT', 'Kênh', 'Ngân sách', 'KPIs', 'ROI', 'Ghi chú']], config: {} } : { analysis: "", context: "" }
+      title: 'TIÊU ĐỀ BÁO CÁO MỚI',
+      subtitle: 'PHÂN TÍCH CHUYÊN SÂU - DIGITAL REPORT',
+      pageLabel: `PAGE ${slides.length + 1}`,
+      footerLeft: 'Confidential Report',
+      footerRight: 'Digital v3.0',
+      content: type === 'table' ? { data: [['CỘT 1', 'CỘT 2', 'CỘT 3']], config: {} } : { analysis: "", context: "" }
     };
     const updated = [...slides, newSlide];
     setSlides(updated);
@@ -171,260 +140,243 @@ export default function App() {
   };
 
   const runAIAnalysis = async () => {
-    if (!selectedFile) return;
+    if (!selectedFile && !slides[currentSlideIndex].content.context) return;
     setIsAnalyzing(true);
     setTimeout(() => {
       const newSlides = [...slides];
-      newSlides[currentSlideIndex].content.analysis = `[PHÂN TÍCH CHUYÊN GIA CHO FILE: ${selectedFile.name}]\n\n1. Hiệu suất kênh Digital tăng 25% so với quý trước nhờ tối ưu hóa CPA.\n2. Tỷ lệ chuyển đổi đạt đỉnh vào khung giờ 20h-22h.\n3. Cần tập trung ngân sách vào Google Search Ads do ROI đạt 4.2.\n4. Đề xuất: Cắt giảm 15% ngân sách Facebook Ads cho nhóm khách hàng cũ.`;
+      newSlides[currentSlideIndex].content.analysis = `[PHÂN TÍCH CHIẾN LƯỢC TỪ CHUYÊN GIA]\n\n• Dựa trên số liệu file ${selectedFile?.name || 'Manual Context'}, hiệu quả chuyển đổi tăng 18%.\n• CPA trung bình đang ở mức thấp kỷ lục ($2.4), đề xuất tăng 20% ngân sách cho tuần tới.\n• Chỉ số Retention Rate duy trì ổn định ở mức 65%.\n• Nhận định: Cần tối ưu thêm nội dung Video Ads để giảm CTR hiện đang có dấu hiệu bão hòa.`;
       setSlides(newSlides);
       setIsAnalyzing(false);
-    }, 2000);
+    }, 1500);
   };
 
   const currentSlide = slides[currentSlideIndex];
 
   return (
-    <div className="flex h-screen bg-[#020617] font-['Be_Vietnam_Pro'] text-white overflow-hidden">
+    <div className="flex h-screen bg-[#020617] font-['Be_Vietnam_Pro'] text-white overflow-hidden w-full">
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@100;300;400;600;800;900&display=swap');
-        .slide-aspect { 
-          aspect-ratio: 16 / 9;
-          width: 100%;
-          max-height: calc(100vh - 180px);
-          object-fit: contain;
-        }
-        .orange-gradient { background: linear-gradient(135deg, #FF6B00 0%, #FF3D00 100%); }
-        .glass { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(12px); }
+        @import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@100;300;400;600;700;800;900&display=swap');
+        .slide-container { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: #020617; }
+        .slide-frame { aspect-ratio: 16 / 9; width: 100%; max-width: 100%; max-height: 100%; background: white; color: #0f172a; position: relative; display: flex; flex-direction: column; box-shadow: 0 50px 100px -20px rgba(0,0,0,0.6); overflow: hidden; }
+        .orange-bar { background: linear-gradient(90deg, #FF6B00 0%, #FF3D00 100%); height: 8px; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
-        .slide-shadow { box-shadow: 0 30px 60px -12px rgba(0,0,0,0.5), 0 18px 36px -18px rgba(0,0,0,0.5); }
+        .editable-input { background: transparent; border: none; padding: 0; outline: none; width: 100%; }
+        .editable-input:focus { background: rgba(255, 107, 0, 0.05); }
       `}</style>
 
-      {/* Sidebar - Cột Slide bên trái có thể ẩn/hiện */}
-      <aside className={`transition-all duration-500 ease-in-out flex flex-col glass border-r border-white/10 ${sidebarOpen ? 'w-80 opacity-100' : 'w-0 opacity-0 overflow-hidden'}`}>
-        <div className="p-6 flex items-center justify-between border-b border-white/5 shrink-0">
+      {/* Sidebar - Cột slide có thể ẩn/hiện hoàn toàn */}
+      <aside className={`transition-all duration-500 ease-in-out border-r border-white/5 flex flex-col bg-[#0F172A] ${sidebarOpen ? 'w-72 opacity-100' : 'w-0 opacity-0 overflow-hidden'}`}>
+        <div className="p-6 border-b border-white/5 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 orange-gradient rounded-xl flex items-center justify-center shadow-lg shadow-orange-500/20">
-              <Layout size={18} />
-            </div>
-            <span className="font-black text-lg tracking-tighter">AI.REPORT</span>
+            <div className="w-8 h-8 bg-orange-600 rounded flex items-center justify-center"><Layout size={16}/></div>
+            <span className="font-bold text-sm tracking-tight">SLIDE LIST</span>
           </div>
-          <button onClick={() => addSlide('table')} className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center hover:bg-orange-500 transition-all">
-            <Plus size={16} />
-          </button>
+          <button onClick={() => addSlide('table')} className="p-1.5 hover:bg-white/5 rounded text-orange-500"><Plus size={18}/></button>
         </div>
-
         <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar">
-          {slides.map((slide, idx) => (
-            <div 
-              key={slide.id}
-              onClick={() => setCurrentSlideIndex(idx)}
-              className={`relative group cursor-pointer rounded-xl border-2 transition-all p-2 ${currentSlideIndex === idx ? 'border-orange-500 bg-orange-500/10' : 'border-transparent hover:bg-white/5'}`}
-            >
-              <div className="aspect-video w-full bg-slate-800 rounded-lg overflow-hidden flex items-center justify-center border border-white/5">
-                {slide.type === 'table' ? <TableIcon className="text-orange-500/40" size={24} /> : <Sparkles className="text-blue-500/40" size={24} />}
+          {slides.map((s, idx) => (
+            <div key={s.id} onClick={() => setCurrentSlideIndex(idx)} className={`p-2 rounded-lg border-2 cursor-pointer transition-all ${currentSlideIndex === idx ? 'border-orange-600 bg-orange-600/10' : 'border-transparent hover:bg-white/5'}`}>
+              <div className="aspect-video bg-slate-800 rounded mb-2 flex items-center justify-center opacity-50">
+                {s.type === 'table' ? <TableIcon size={20}/> : <Sparkles size={20}/>}
               </div>
-              <div className="mt-2 flex justify-between items-center px-1">
-                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest truncate">{idx + 1}. {slide.title || slide.type}</span>
-                <button onClick={(e) => { e.stopPropagation(); setSlides(slides.filter((_, i) => i !== idx)); }} className="opacity-0 group-hover:opacity-100 text-red-500/70 hover:text-red-500 transition-opacity"><Trash2 size={12}/></button>
-              </div>
+              <div className="text-[10px] font-bold text-slate-400 uppercase truncate">{idx + 1}. {s.title}</div>
             </div>
           ))}
         </div>
-
-        <div className="p-4 border-t border-white/5 space-y-2 shrink-0">
-          <button onClick={() => setShowDrive(true)} className="w-full flex items-center justify-center gap-2 bg-blue-600/10 text-blue-400 py-2.5 rounded-xl text-[10px] font-bold hover:bg-blue-600/20 transition-all border border-blue-500/10">
-            <HardDrive size={14} /> DRIVE STORAGE
+        <div className="p-4 border-t border-white/5">
+          <button onClick={() => addSlide('ai')} className="w-full py-2 bg-white/5 border border-white/10 rounded-lg text-[10px] font-bold hover:bg-orange-600 hover:text-white transition-all uppercase tracking-widest flex items-center justify-center gap-2">
+            <Sparkles size={12}/> Thêm AI Slide
           </button>
         </div>
       </aside>
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col relative overflow-hidden bg-[#020617]">
-        {/* Header Bar */}
-        <header className="h-16 px-6 flex items-center justify-between border-b border-white/5 bg-[#0F172A]/40 backdrop-blur-md z-20">
+      {/* Main Workspace - Chiếm toàn bộ diện tích còn lại */}
+      <div className="flex-1 flex flex-col min-w-0 bg-[#020617]">
+        {/* Topbar mỏng, thanh thoát */}
+        <header className="h-14 px-4 flex items-center justify-between border-b border-white/5 bg-[#020617] z-30">
           <div className="flex items-center gap-4 flex-1">
-            <button 
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="p-2 hover:bg-white/5 rounded-lg transition-colors text-slate-400 hover:text-white"
-              title={sidebarOpen ? "Ẩn danh sách slide" : "Hiện danh sách slide"}
-            >
-              {sidebarOpen ? <PanelLeftClose size={20} /> : <PanelLeftOpen size={20} />}
+            <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-2 text-slate-400 hover:text-white transition-colors">
+              {sidebarOpen ? <PanelLeftClose size={20}/> : <PanelLeftOpen size={20}/>}
             </button>
             <input 
-              value={reportName}
-              onChange={(e) => setReportName(e.target.value)}
-              className="bg-transparent border-none text-base font-bold focus:ring-0 text-slate-200 w-full max-w-md"
-              placeholder="Tên báo cáo..."
+              value={reportName} 
+              onChange={(e) => setReportName(e.target.value)} 
+              className="bg-transparent border-none text-xs font-bold text-slate-400 focus:ring-0 w-full max-w-md uppercase tracking-widest"
             />
           </div>
-          
-          <div className="flex items-center gap-3">
-            {isSaving && <div className="text-[9px] text-orange-500 animate-pulse font-bold tracking-widest mr-2">AUTO-SAVING</div>}
-            <button onClick={() => setShowHistory(!showHistory)} className="p-2 text-slate-400 hover:text-white transition-all"><Clock size={18} /></button>
-            <div className="h-4 w-px bg-white/10 mx-1"></div>
-            <button onClick={() => saveReport(true)} className="flex items-center gap-2 px-5 py-2 bg-white text-slate-900 rounded-xl font-bold text-xs hover:bg-orange-500 hover:text-white transition-all">
-              <Save size={14} /> LƯU BẢN GHI
+          <div className="flex items-center gap-4">
+            {isSaving && <div className="text-[9px] text-orange-500 font-bold uppercase tracking-tighter">Syncing...</div>}
+            <button onClick={() => setShowDrive(true)} className="flex items-center gap-2 text-[10px] font-bold text-blue-400 bg-blue-400/10 px-3 py-1.5 rounded border border-blue-400/20 hover:bg-blue-400/20 transition-all">
+              <HardDrive size={14}/> CONNECT DRIVE
+            </button>
+            <button onClick={() => saveReport(true)} className="flex items-center gap-2 bg-orange-600 px-4 py-1.5 rounded text-[10px] font-bold hover:bg-orange-700 shadow-lg shadow-orange-600/20 transition-all">
+              <Save size={14}/> LƯU PHIÊN BẢN
             </button>
           </div>
         </header>
 
-        {/* Slide Canvas Area */}
-        <main className="flex-1 flex items-center justify-center p-8 lg:p-12 overflow-hidden bg-[#020617]">
-          <div className="w-full h-full flex items-center justify-center max-w-[1400px]">
-            {currentSlide ? (
-              <div className="slide-aspect bg-white text-slate-900 slide-shadow relative flex flex-col transition-all duration-300">
-                {/* Decorative Top Line */}
-                <div className="h-1.5 orange-gradient w-full shrink-0" />
+        {/* Slide Canvas - Không giới hạn lề */}
+        <main className="flex-1 slide-container overflow-hidden p-2 lg:p-6 relative">
+          <div className="slide-frame transition-all duration-500">
+            {/* Header Line */}
+            <div className="orange-bar shrink-0" />
 
-                <div className="flex-1 p-8 lg:p-12 flex flex-col overflow-hidden">
-                  {/* Slide Title Bar */}
-                  <div className="flex items-start gap-5 mb-8 shrink-0">
-                    <div className="w-1 h-12 orange-gradient rounded-full" />
-                    <div className="flex-1 min-w-0">
-                      <input 
-                        value={currentSlide.title}
-                        onChange={(e) => {
-                          const ns = [...slides]; ns[currentSlideIndex].title = e.target.value; setSlides(ns);
-                        }}
-                        className="text-4xl font-[900] tracking-tighter text-slate-900 border-none p-0 focus:ring-0 uppercase w-full bg-transparent leading-none"
-                        placeholder="TIÊU ĐỀ SLIDE"
-                      />
-                      <div className="text-[9px] font-black text-orange-500 mt-2 uppercase tracking-[0.3em]">Digital Performance Insight</div>
-                    </div>
-                    <div className="text-5xl font-black text-slate-50 opacity-10 absolute right-8 top-8 select-none pointer-events-none uppercase">PAGE {currentSlideIndex + 1}</div>
-                  </div>
-
-                  {/* Content Frame */}
-                  <div className="flex-1 min-h-0 overflow-hidden">
-                    {currentSlide.type === 'table' ? (
-                      <div className="h-full rounded-xl border border-slate-100 shadow-sm bg-white overflow-hidden flex flex-col">
-                        <table className="w-full border-collapse table-fixed">
-                          <thead>
-                            <tr className="orange-gradient text-white">
-                              {currentSlide.content.data[0].map((h, i) => (
-                                <th key={i} className="p-3 text-left text-[10px] font-black uppercase tracking-widest border-r border-white/10 last:border-0 truncate">{h}</th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody className="overflow-y-auto">
-                            {currentSlide.content.data.slice(1).map((row, rIdx) => (
-                              <tr key={rIdx} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/40 transition-colors">
-                                {row.map((cell, cIdx) => (
-                                  <td key={cIdx} className="p-0 border-r border-slate-50 last:border-0 h-10">
-                                    <input 
-                                      value={cell}
-                                      onChange={(e) => handleTableUpdate(currentSlideIndex, rIdx + 1, cIdx, e.target.value)}
-                                      className="w-full h-full px-3 bg-transparent border-none focus:ring-1 focus:ring-orange-500/20 text-[11px] text-slate-600 font-medium truncate"
-                                    />
-                                  </td>
-                                ))}
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                        {/* Empty spacer for clean look if rows are few */}
-                        <div className="flex-1 bg-white" />
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-12 gap-8 h-full">
-                        <div className="col-span-5 flex flex-col space-y-4">
-                           <div className="flex-1 p-6 bg-slate-50 rounded-2xl border border-slate-100 flex flex-col">
-                              <h4 className="text-[9px] font-black text-blue-500 uppercase tracking-widest mb-3 flex items-center gap-2">
-                                <FileText size={12}/> Input context (Google Drive)
-                              </h4>
-                              <textarea 
-                                value={currentSlide.content.context}
-                                onChange={(e) => { const ns = [...slides]; ns[currentSlideIndex].content.context = e.target.value; setSlides(ns); }}
-                                className="flex-1 w-full bg-transparent border-none focus:ring-0 text-[12px] italic text-slate-500 resize-none leading-relaxed no-scrollbar"
-                                placeholder="Dán nội dung từ PPT vào đây để AI phân tích..."
-                              />
-                           </div>
-                           <button 
-                             onClick={runAIAnalysis} 
-                             disabled={isAnalyzing} 
-                             className="w-full py-4 orange-gradient rounded-xl flex items-center justify-center gap-3 text-white font-black text-[11px] uppercase tracking-widest shadow-lg hover:brightness-110 active:scale-[0.98] transition-all disabled:opacity-50"
-                           >
-                             {isAnalyzing ? "Processing..." : <><Sparkles size={14} /> AI Expert Analysis</>}
-                           </button>
-                        </div>
-                        <div className="col-span-7 flex flex-col">
-                           <div className="flex-1 p-8 bg-slate-900 rounded-[2rem] shadow-inner relative overflow-hidden flex flex-col">
-                              <div className="flex items-center gap-2 mb-5 shrink-0">
-                                <div className="w-1.5 h-1.5 bg-orange-500 rounded-full" />
-                                <span className="text-[9px] font-black text-orange-500 uppercase tracking-widest">AI Result Insight</span>
-                              </div>
-                              <textarea 
-                                value={currentSlide.content.analysis}
-                                onChange={(e) => { const ns = [...slides]; ns[currentSlideIndex].content.analysis = e.target.value; setSlides(ns); }}
-                                className="flex-1 w-full bg-transparent border-none focus:ring-0 text-slate-300 text-[14px] font-medium leading-relaxed resize-none no-scrollbar"
-                                placeholder="Phân tích chuyên gia hiển thị tại đây..."
-                              />
-                           </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Slide Footer */}
-                  <div className="mt-8 shrink-0 flex justify-between items-center text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] border-t border-slate-100 pt-6">
-                    <div className="flex items-center gap-3">
-                      <span className="text-orange-500 text-[14px]">●</span>
-                      <span>{selectedFile?.name || "Independent Report"}</span>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <span>Confidential</span>
-                      <span className="text-slate-900 font-black">Digital v2.5</span>
-                    </div>
+            {/* Slide Body */}
+            <div className="flex-1 p-10 lg:p-14 flex flex-col overflow-hidden relative">
+              {/* Title Section */}
+              <div className="flex items-start justify-between mb-10 shrink-0 relative">
+                <div className="flex gap-6 items-start flex-1">
+                  <div className="w-1.5 h-16 bg-orange-600 rounded-full shrink-0 mt-1" />
+                  <div className="flex-1">
+                    <input 
+                      value={currentSlide.title} 
+                      onChange={(e) => handleSlideUpdate('title', e.target.value)}
+                      className="text-5xl font-black text-slate-900 leading-none focus:ring-0 editable-input uppercase tracking-tighter"
+                      placeholder="TIÊU ĐỀ CHÍNH"
+                    />
+                    <input 
+                      value={currentSlide.subtitle} 
+                      onChange={(e) => handleSlideUpdate('subtitle', e.target.value)}
+                      className="text-xs font-bold text-orange-600 mt-2 focus:ring-0 editable-input uppercase tracking-[0.4em]"
+                      placeholder="DÒNG MÔ TẢ PHỤ"
+                    />
                   </div>
                 </div>
+                {/* Editable Page Number */}
+                <input 
+                  value={currentSlide.pageLabel} 
+                  onChange={(e) => handleSlideUpdate('pageLabel', e.target.value)}
+                  className="text-right text-6xl font-black text-slate-100 absolute right-0 top-0 pointer-events-auto w-48 focus:ring-0"
+                />
               </div>
-            ) : (
-              <div className="text-slate-500 font-medium italic text-lg animate-pulse">Chọn hoặc tạo Slide mới để bắt đầu thiết kế...</div>
-            )}
+
+              {/* Dynamic Content */}
+              <div className="flex-1 min-h-0 overflow-hidden">
+                {currentSlide.type === 'table' ? (
+                  <div className="h-full border border-slate-100 rounded-xl overflow-hidden flex flex-col bg-white shadow-sm">
+                    <table className="w-full border-collapse">
+                      <thead>
+                        <tr className="bg-slate-900 text-white">
+                          {currentSlide.content.data[0].map((h, i) => (
+                            <th key={i} className="p-4 text-left">
+                              <input 
+                                value={h} 
+                                onChange={(e) => handleTableUpdate(0, i, e.target.value)}
+                                className="w-full bg-transparent border-none focus:ring-0 text-[10px] font-black uppercase tracking-widest text-white"
+                              />
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {currentSlide.content.data.slice(1).map((row, rIdx) => (
+                          <tr key={rIdx} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                            {row.map((cell, cIdx) => (
+                              <td key={cIdx} className="p-0 border-r border-slate-50 last:border-0">
+                                <input 
+                                  value={cell} 
+                                  onChange={(e) => handleTableUpdate(rIdx + 1, cIdx, e.target.value)}
+                                  className="w-full p-4 bg-transparent border-none focus:ring-0 text-[11px] font-medium text-slate-600"
+                                />
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-12 gap-10 h-full">
+                    {/* AI Column 1: Context */}
+                    <div className="col-span-5 flex flex-col gap-4">
+                      <div className="flex-1 bg-slate-50 rounded-2xl p-8 border border-slate-100 flex flex-col relative group">
+                        <div className="flex items-center gap-2 mb-4">
+                          <Edit3 size={14} className="text-blue-500"/>
+                          <span className="text-[10px] font-bold text-blue-500 uppercase tracking-widest">Context Input Area</span>
+                        </div>
+                        <textarea 
+                          value={currentSlide.content.context}
+                          onChange={(e) => {
+                            const ns = [...slides]; ns[currentSlideIndex].content.context = e.target.value; setSlides(ns);
+                          }}
+                          className="flex-1 w-full bg-transparent border-none focus:ring-0 text-sm italic text-slate-500 leading-relaxed resize-none no-scrollbar"
+                          placeholder="Dán dữ liệu PowerPoint hoặc Context tại đây..."
+                        />
+                      </div>
+                      <button 
+                        onClick={runAIAnalysis}
+                        disabled={isAnalyzing}
+                        className="w-full py-5 bg-slate-900 rounded-2xl flex items-center justify-center gap-4 text-white font-black text-xs uppercase tracking-[0.2em] shadow-xl hover:bg-orange-600 transition-all disabled:opacity-50"
+                      >
+                        {isAnalyzing ? "AI IS ANALYZING..." : <><Sparkles size={18}/> Generate AI Insights</>}
+                      </button>
+                    </div>
+
+                    {/* AI Column 2: Result */}
+                    <div className="col-span-7 h-full">
+                      <div className="h-full bg-slate-900 rounded-[2.5rem] p-10 flex flex-col relative overflow-hidden group">
+                        <div className="flex items-center gap-2 mb-6 shrink-0">
+                          <div className="w-2 h-2 bg-orange-600 rounded-full animate-pulse" />
+                          <span className="text-[10px] font-black text-orange-500 uppercase tracking-widest">Expert Analysis Result</span>
+                        </div>
+                        <textarea 
+                          value={currentSlide.content.analysis}
+                          onChange={(e) => {
+                            const ns = [...slides]; ns[currentSlideIndex].content.analysis = e.target.value; setSlides(ns);
+                          }}
+                          className="flex-1 w-full bg-transparent border-none focus:ring-0 text-slate-300 text-base font-medium leading-[2] resize-none no-scrollbar italic"
+                          placeholder="Phân tích AI sẽ hiển thị tại đây. Bạn có thể tự do chỉnh sửa mọi từ ngữ..."
+                        />
+                        <div className="absolute top-10 right-10 opacity-5 pointer-events-none">
+                          <BarChart3 size={160} />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer Section */}
+              <div className="mt-10 shrink-0 flex justify-between items-center text-[10px] font-bold text-slate-300 uppercase tracking-[0.3em] border-t border-slate-100 pt-8">
+                <div className="flex items-center gap-4">
+                  <span className="text-orange-600">●</span>
+                  <input 
+                    value={currentSlide.footerLeft} 
+                    onChange={(e) => handleSlideUpdate('footerLeft', e.target.value)}
+                    className="w-48 focus:ring-0 editable-input"
+                  />
+                </div>
+                <div className="flex items-center gap-4">
+                  <input 
+                    value={currentSlide.footerRight} 
+                    onChange={(e) => handleSlideUpdate('footerRight', e.target.value)}
+                    className="text-right w-48 focus:ring-0 editable-input"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         </main>
       </div>
 
-      {/* Floating Control for Sidebar toggle if hidden and mouse at edge could go here, but button is better */}
-
-      {/* Modal: Google Drive Explorer */}
+      {/* Drive Modal */}
       {showDrive && (
-        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
-          <div className="bg-[#1E293B] w-full max-w-2xl max-h-[500px] rounded-3xl border border-white/10 flex flex-col overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-200">
-            <div className="p-8 flex items-center justify-between border-b border-white/5">
-              <h3 className="text-xl font-black flex items-center gap-3"><HardDrive size={20} className="text-blue-400"/> Drive File Explorer</h3>
-              <button onClick={() => setShowDrive(false)} className="p-2 hover:bg-white/5 rounded-full"><X size={20} /></button>
+        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-sm z-[100] flex items-center justify-center p-12">
+          <div className="bg-[#1E293B] w-full max-w-2xl h-[500px] rounded-[3rem] border border-white/10 flex flex-col overflow-hidden animate-in zoom-in duration-200">
+            <div className="p-10 flex items-center justify-between border-b border-white/5">
+              <h3 className="text-2xl font-black">Google Drive Explorer</h3>
+              <button onClick={() => setShowDrive(false)} className="p-3 hover:bg-white/5 rounded-full transition-colors"><X size={24}/></button>
             </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-2 no-scrollbar">
-              {[{ name: "Digital_Marketing_Q1.pptx", size: "12.5 MB" }, { name: "Ads_Performance_Facebook.xlsx", size: "4.2 MB" }].map((file, i) => (
-                <div key={i} onClick={() => { setSelectedFile(file); setShowDrive(false); }} className="p-4 bg-white/5 border border-white/5 rounded-xl flex items-center justify-between hover:bg-orange-500/10 cursor-pointer transition-all group">
-                  <div className="flex items-center gap-4"><FileText size={18} className="text-slate-400 group-hover:text-orange-500 transition-colors" /><div><p className="font-bold text-sm text-slate-200">{file.name}</p><p className="text-[9px] text-slate-500 uppercase">{file.size}</p></div></div>
-                  <ChevronRight size={16} className="text-slate-600" />
+            <div className="flex-1 p-8 overflow-y-auto space-y-3 no-scrollbar">
+              {[{ name: "Performance_Report_May.pptx", size: "14.2 MB" }, { name: "Digital_Campaign_Data.xlsx", size: "8.5 MB" }].map((f, i) => (
+                <div key={i} onClick={() => { setSelectedFile(f); setShowDrive(false); }} className="p-5 bg-white/5 rounded-2xl flex items-center justify-between hover:bg-orange-600/10 cursor-pointer transition-all border border-transparent hover:border-orange-600/30">
+                  <div className="flex items-center gap-4">
+                    <FileText size={20} className="text-slate-400"/>
+                    <div><p className="font-bold text-sm">{f.name}</p><p className="text-[10px] text-slate-500 uppercase">{f.size}</p></div>
+                  </div>
+                  <ChevronRight size={18} className="text-slate-500"/>
                 </div>
               ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal: History */}
-      {showHistory && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[100] flex items-center justify-end">
-          <div className="w-80 h-full bg-[#0F172A] shadow-2xl border-l border-white/10 flex flex-col animate-in slide-in-from-right duration-300">
-            <div className="p-6 border-b border-white/5 flex items-center justify-between">
-              <h3 className="text-lg font-bold">Lịch sử sao lưu</h3>
-              <button onClick={() => setShowHistory(false)}><X size={18} /></button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-3 no-scrollbar">
-              {history.map((v) => (
-                <div key={v.id} className="p-4 bg-white/5 rounded-xl border border-white/5 hover:border-orange-500/50 cursor-pointer transition-all" onClick={() => {
-                  setSlides(JSON.parse(v.slides)); setReportName(v.name); setShowHistory(false);
-                }}>
-                  <p className="text-xs font-bold text-slate-200 truncate">{v.versionName}</p>
-                  <p className="text-[9px] text-slate-500 mt-1 uppercase">{new Date(v.updatedAt).toLocaleString('vi-VN')}</p>
-                </div>
-              ))}
-              {history.length === 0 && <div className="text-center text-slate-600 text-xs py-10 italic">Chưa có bản ghi lịch sử</div>}
             </div>
           </div>
         </div>
